@@ -9,103 +9,114 @@ import pygame
 import torch
 
 
-class TerrainEmbedding:
+class TerrainEmbedding(np.ndarray):
     """Embedding for terrain description."""
+
+    def __new__(cls, input_array):
+        obj = np.asarray(input_array).view(cls)
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
 
     def get_color(self) -> tuple[int, int, int]:
         """Return RGB color for rendering."""
-        pass
+        # Define a transformation matrix to map the vector to RGB space
+        transformation_matrix = np.random.rand(3, self.shape[-1])  # Random 3xN matrix
+
+        # Apply the transformation
+        rgb_vector = np.dot(transformation_matrix, self)
+
+        # Clip the values to the range [0, 1] and scale to [0, 255]
+        rgb_vector = np.clip(rgb_vector, 0, 1) * 255
+
+        # Convert to integer and return as a tuple
+        return tuple(rgb_vector.astype(int))
 
     def encode(self) -> torch.Tensor:
         """Encode the terrain embedding into a tensor."""
-        pass
+        return torch.tensor(self, dtype=torch.float32)
 
 
-
-class SpatialTranscripto:
+class SpatialTranscripto(np.ndarray):
     """Transcripto for spatial information."""
+
+    def __new__(cls, input_array):
+        obj = np.asarray(input_array).view(cls)
+        return obj
+
+    def __array_finalize__(self, obj):
+        if obj is None: return
 
     def get_color(self) -> tuple[int, int, int]:
         """Return RGB color for rendering."""
-        pass
+        # Define a transformation matrix to map the vector to RGB space
+        transformation_matrix = np.random.rand(3, self.shape[-1])  # Random 3xN matrix
+
+        # Apply the transformation
+        rgb_vector = np.dot(transformation_matrix, self)
+
+        # Clip the values to the range [0, 1] and scale to [0, 255]
+        rgb_vector = np.clip(rgb_vector, 0, 1) * 255
+
+        # Convert to integer and return as a tuple
+        return tuple(rgb_vector.astype(int))
 
     def encode(self) -> torch.Tensor:
         """Encode the spatial transcripto into a tensor."""
-        pass
-
+        return torch.tensor(self, dtype=torch.float32)
 
 
 class TerrainTile:
     """Tile for terrain description."""
 
-    terrain_embedding: TerrainEmbedding # HnE
-    spatial_transcripto: SpatialTranscripto # ~ Agent
+    def __init__(self, terrain_embedding: TerrainEmbedding, spatial_transcripto: SpatialTranscripto) -> None:
+        self.terrain_embedding = terrain_embedding
+        self.spatial_transcripto = spatial_transcripto
 
     def get_color_embedding(self) -> tuple[int, int, int]:
-        """Return RGB color for rendering the terrain embedding."""
         return self.terrain_embedding.get_color()
-    
+
     def get_color_transcripto(self) -> tuple[int, int, int]:
-        """Return RGB color for rendering the spatial transcripto."""
         return self.spatial_transcripto.get_color()
 
     def get_embedding(self) -> TerrainEmbedding:
-        """Get the embedding of the terrain."""
         return self.terrain_embedding
 
     def get_spatial_transcripto(self) -> SpatialTranscripto:
-        """Get the spatial transcripto of the terrain."""
         return self.spatial_transcripto
-    
+
+    def get_color(self) -> tuple[int, int, int]:
+        return self.get_color_embedding()
+
     def encode(self) -> torch.Tensor:
-        """Encode the terrain tile into a tensor."""
-        return torch.cat([self.terrain_embedding.encode(), self.spatial_transcripto.encode()], dim=0)
+        return torch.cat((self.terrain_embedding.encode(), self.spatial_transcripto.encode()), dim=0)
+
 
 class GameMap:
     """Represents the game's terrain map."""
 
-    def __init__(self, terrain_embedding: TerrainEmbedding, spatial_transcripto: SpatialTranscripto, params: tuple[int, int, int]) -> None:
-        """Initialize the game map with dimensions."""
-        self.width: int = params[0]
-        self.height: int = params[1]
-        self.cell_size: int = params[2]
-        self.terrain: np.ndarray = np.empty((self.height, self.width), dtype=TerrainTile)
+    def __init__(self, array_embedding: np.ndarray, array_transcripto: np.ndarray, params: tuple[int, int, int]) -> None:
+        self.width, self.height, _ = params
+        self.terrain = np.empty((self.height, self.width), dtype=object)
 
         for y in range(self.height):
             for x in range(self.width):
-                self.terrain[y, x] = TerrainTile(terrain_embedding[y,x], spatial_transcripto[y,x])
+                self.terrain[y, x] = TerrainTile(TerrainEmbedding(array_embedding[y, x]), SpatialTranscripto(array_transcripto[y, x]))
 
     def encode(self) -> torch.Tensor:
-        """Generate a tensor with terrain properties for ML training."""
-        zero_terrain_tile: TerrainTile = self.terrain[0, 0]
-        zero_tile_tensor: torch.Tensor = zero_terrain_tile.encode()
-        encoded_tile_length: int = zero_tile_tensor.size(0)
-
-        encoded_map: torch.Tensor = torch.zeros((self.height, self.width, encoded_tile_length), dtype=torch.float32)
-        for y in range(self.height):
-            for x in range(self.width):
-                terrain_tile: TerrainTile = self.terrain[y, x]
-                if terrain_tile:
-                    encoded_map[y, x] = terrain_tile.encode()
-        return encoded_map
+        encoded_tiles = [self.terrain[y, x].encode() for y in range(self.height) for x in range(self.width)]
+        return torch.stack(encoded_tiles).view(self.height, self.width, -1)
 
     def get_terrain_tile(self, x: int, y: int) -> TerrainTile:
-        """Return the terrain tile at the specified coordinates."""
         return self.terrain[y, x]
 
     def render(self, screen: pygame.Surface, cell_size: int = 6) -> None:
-        """Render the terrain map to a PyGame surface."""
-        if not self.cell_size:
-            self.cell_size = cell_size
         for y in range(self.height):
             for x in range(self.width):
-                terrain_tile: TerrainTile = self.terrain[y, x]
-                if terrain_tile:
-                    pygame.draw.rect(
-                        screen,
-                        terrain_tile.get_color(),
-                        (x * self.cell_size, y * self.cell_size, self.cell_size, self.cell_size),
-                    )
+                tile: TerrainTile = self.terrain[y, x]
+                color = tile.get_color()
+                pygame.draw.rect(screen, color, pygame.Rect(x * cell_size, y * cell_size, cell_size, cell_size))
 
 
 class GameRenderer:
