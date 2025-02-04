@@ -18,23 +18,22 @@ class Actions(Enum):
 class TerrainWorldEnv(gym.Env):
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 4}
 
-    def __init__(self, render_mode=None, size: int = 64, target_zone_size: int = 8):
-        self.size = size  # The size of the square grid
+    def __init__(self, terrain_embedding: np.ndarray, spatial_transcripto: np.ndarray, map_params: tuple[int, int, int], render_mode=None):
+        """Initialize the environment."""
+
+        self.size = map_params[2]  # The size of the square grid
         self.window_size = 512  # The size of the PyGame window
-        self.target_zone_size = target_zone_size  # Size of the target zone
 
-        # Load the terrain map
-        self.game_map  = terrain.GameMap.load_from_csv(Path(__file__).parent / "data" / "terrain.csv")
-
-        print(self.game_map.terrain[0,0])
+        # Initialize the game map
+        self.game_map = terrain.GameMap(terrain_embedding, spatial_transcripto, map_params)
 
         # Observations are dictionaries with the agent's and the target's location.
         # Each location is encoded as an element of {0, ..., `size`}^2,
         # i.e. MultiDiscrete([size, size]).
         self.observation_space = spaces.Dict(
             {
-                "agent": spaces.Box(0, size - 1, shape=(2,), dtype=int),
-                "target_zone": spaces.Box(0, size - 1, shape=(2, 2), dtype=int),
+                "agent": spaces.Box(0, self.size - 1, shape=(2,), dtype=int),
+                "target_zone": spaces.Box(0, self.size - 1, shape=(2, 2), dtype=int),
             }
         )
 
@@ -113,6 +112,7 @@ class TerrainWorldEnv(gym.Env):
         # An episode is done iff the agent has reached the target
         terminated = np.all(self._target_zone[0] <= self._agent_location) and np.all(self._agent_location <= self._target_zone[1])
         reward = 1 if terminated else 0  # Binary sparse rewards
+        reward -= nn.functional.mse_loss(self.game_map.terrain[self._agent_location[1], self._agent_location[0]].encode(), self.game_map.terrain[self._target_zone_center[1], self._target_zone_center[0]].encode())
         observation = self._get_obs()
         info = self._get_info()
 

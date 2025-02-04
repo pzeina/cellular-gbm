@@ -10,5 +10,8 @@ while not episode_over:
     observation, reward, terminated, truncated, info = env.step(action)
 
     episode_over = terminated or truncated
+        
+    # Render the environment
+    env.render()
 
 env.reset()
