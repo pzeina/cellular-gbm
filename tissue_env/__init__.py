@@ -16,7 +16,7 @@ from tissue_env.envs.terrain_world import TerrainWorldEnv
 from tissue_env.envs.classes.terrain import TerrainEmbedding, SpatialTranscripto
 
 def load_terrain_embedding():
-    terrain_embedding = np.load('tissue_env/envs/data/terrain_embedding.npy')
+    terrain_embedding = np.load('tissue_env/envs/data/embeddings_30a_v2.npy')
     return terrain_embedding
 
 def load_spatial_transcripto():
@@ -24,17 +24,22 @@ def load_spatial_transcripto():
     return spatial_transcripto
 
 def register_terrain_world_env():
-    map_params = (10, 10, 10)
     terrain_embedding = load_terrain_embedding()
-    spatial_transcripto = load_spatial_transcripto()
+    size = terrain_embedding.shape
+    print(terrain_embedding.shape)
+    spatial_transcripto = np.random.rand(*size)
+    map_params = (size[0], size[1], size[0])
+
+    # spatial_transcripto = load_spatial_transcripto()
 
     register(
         id='tissue_env/TerrainWorld-v0',
         entry_point='tissue_env.envs:TerrainWorldEnv',
         kwargs={
-            'array_embedding': terrain_embedding,
-            'array_transcripto': spatial_transcripto,
+            'terrain_embedding': terrain_embedding,
+            'spatial_transcripto': spatial_transcripto,
             'map_params': map_params,
+            'scores_file': 'tissue_env/envs/data/scores.npy',
             'render_mode': 'human'
         }
     )

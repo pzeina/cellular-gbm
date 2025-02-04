@@ -7,6 +7,8 @@ from typing import Optional
 import numpy as np
 import pygame
 import torch
+import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 
 
 class TerrainEmbedding(np.ndarray):
@@ -70,9 +72,11 @@ class SpatialTranscripto(np.ndarray):
 class TerrainTile:
     """Tile for terrain description."""
 
-    def __init__(self, terrain_embedding: TerrainEmbedding, spatial_transcripto: SpatialTranscripto) -> None:
+    def __init__(self, terrain_embedding: TerrainEmbedding, spatial_transcripto: SpatialTranscripto, color: tuple[int, int, int]) -> None:
         self.terrain_embedding = terrain_embedding
         self.spatial_transcripto = spatial_transcripto
+        self.color = color
+
 
     def get_color_embedding(self) -> tuple[int, int, int]:
         return self.terrain_embedding.get_color()
@@ -87,22 +91,31 @@ class TerrainTile:
         return self.spatial_transcripto
 
     def get_color(self) -> tuple[int, int, int]:
-        return self.get_color_embedding()
+        return self.color
 
     def encode(self) -> torch.Tensor:
         return torch.cat((self.terrain_embedding.encode(), self.spatial_transcripto.encode()), dim=0)
+    
+    def encode_embedding(self) -> torch.Tensor:
+        return self.terrain_embedding.encode()
 
 
 class GameMap:
     """Represents the game's terrain map."""
 
-    def __init__(self, array_embedding: np.ndarray, array_transcripto: np.ndarray, params: tuple[int, int, int]) -> None:
+    def __init__(self, array_embedding: np.ndarray, array_transcripto: np.ndarray, params: tuple[int, int, int], color_array: np.ndarray) -> None:
         self.width, self.height, _ = params
         self.terrain = np.empty((self.height, self.width), dtype=object)
 
+        # Use a custom colormap for heatmap coloring
+        colormap = cm.get_cmap('coolwarm')
+
         for y in range(self.height):
             for x in range(self.width):
-                self.terrain[y, x] = TerrainTile(TerrainEmbedding(array_embedding[y, x]), SpatialTranscripto(array_transcripto[y, x]))
+                # Assuming color_array contains float values in the range [0, 1]
+                color = colormap(color_array[y, x])[:3]  # Get RGB values from colormap
+                color = tuple((np.array(color) * 255).astype(int))  # Scale to [0, 255] and convert to int
+                self.terrain[y, x] = TerrainTile(TerrainEmbedding(array_embedding[y, x]), SpatialTranscripto(array_transcripto[y, x]), color)
 
     def encode(self) -> torch.Tensor:
         encoded_tiles = [self.terrain[y, x].encode() for y in range(self.height) for x in range(self.width)]
